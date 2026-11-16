@@ -1,0 +1,19 @@
+# macOS
+.DS_Store
+
+# Креды: в репозитории только тестовые dev-учётки
+users/*
+!users/users-dev.csv
+!users/users-example.csv
+
+# Результаты прогонов (кроме эталонного отчёта по табелю)
+results/**
+!results/
+!results/dev/
+!results/dev/timesheet-hr-flow/
+!results/dev/timesheet-hr-flow/load/
+!results/dev/timesheet-hr-flow/load/2026-11-16_11-09-07/
+!results/dev/timesheet-hr-flow/load/2026-11-16_11-09-07/**
+
+# HAR-файлы содержат cookies/токены
+*.har
