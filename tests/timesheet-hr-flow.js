@@ -31,6 +31,7 @@ export const options = buildOptions('timesheet_hr_flow', {
   'checks{type:timesheet_edit}': ['rate>0.95'],
   'http_req_duration{name:GET timesheet grid}': ['p(95)<3000'],
   'http_req_duration{name:PUT timesheet changes}': ['p(95)<2000'],
+  'http_req_duration{name:GET timesheet changes delta}': ['p(95)<1000'],
 });
 
 // ---------- параметры ----------
@@ -61,6 +62,10 @@ const EDITS_PER_ITERATION = parseInt(__ENV.EDITS_PER_ITERATION || '2', 10);
 const ALLOW_CREATE = (__ENV.ALLOW_CREATE || 'true').toLowerCase() === 'true';
 // Комментарий к правке (виден в истории табеля)
 const EDIT_COMMENT = __ENV.EDIT_COMMENT || 'k6 load test';
+// Что делать после сохранения правки:
+//   month — как текущий фронт: перечитать весь месяц (GET /timesheets/{y}/{m}/)
+//   delta — как новый фронт: GET /timesheets/{y}/{m}/changes/?since=<ревизия>
+const AFTER_EDIT_MODE = (__ENV.AFTER_EDIT_MODE || 'month').toLowerCase();
 
 // ---------- метрики ----------
 
@@ -68,6 +73,7 @@ const editConflicts = new Counter('timesheet_edit_conflicts'); // 409 на PUT c
 const editRetries = new Counter('timesheet_edit_retries');
 const editsDone = new Counter('timesheet_edits_done');
 const gridSize = new Trend('timesheet_grid_bytes');
+const deltaSize = new Trend('timesheet_delta_bytes');
 
 // ---------- helpers ----------
 
@@ -210,7 +216,12 @@ export default function () {
   let auth;
 
   group('01_login', () => {
-    auth = login(user);
+    try {
+      auth = login(user);
+    } catch (e) {
+      // login() вызывает fail() при ошибке — ловим, чтобы сработала пауза ниже
+      console.error(`login failed: ${String(e).slice(0, 300)}`);
+    }
   });
 
   if (!auth || (!auth.sessionToken && !auth.cookies)) {
@@ -284,6 +295,8 @@ export default function () {
   sleep(THINK_TIME_SECONDS);
 
   group('03_ensure_timesheet', () => {
+    // Список табелей не загрузился (502 и т.п.) — не знаем, есть ли табель, создавать не пытаемся
+    if (!Array.isArray(listBody?.timesheets)) return;
     if (findTimesheetForDepartment(listBody, departmentId)) return;
 
     if (!ALLOW_CREATE) {
@@ -377,6 +390,7 @@ export default function () {
     }
 
     const dep = encode(departmentId);
+    let knownRevision = Number(grid.revision || 0);
 
     for (let i = 0; i < EDITS_PER_ITERATION; i++) {
       const cell = pickCell(cells, i);
@@ -424,17 +438,49 @@ export default function () {
         );
       }
 
-      // После сохранения фронт перечитывает сетку, историю дня и ревизию
-      batchGet(
-        auth,
-        [
-          ['GET timesheet grid', `${WTM_API}/timesheets/${YEAR}/${MONTH}/?department_id=${dep}`],
-          ['GET timesheet day history', `${WTM_API}/timesheets/${timesheetId}/days/${cell.date}/history/?origin=all&limit=500`],
-          ['GET timesheet revision', `${WTM_API}/timesheets/${YEAR}/${MONTH}/revision/?department_id=${dep}`],
-        ],
-        'after edit',
-        'timesheet',
-      );
+      if (AFTER_EDIT_MODE === 'delta') {
+        // Новый фронт: вместо перечитывания месяца берём дельту с ревизии до правки
+        const deltaRes = http.get(
+          `${WTM_API}/timesheets/${YEAR}/${MONTH}/changes/?department_id=${dep}&since=${knownRevision}`,
+          buildAuthParams(auth, 'GET timesheet changes delta', 'timesheet'),
+        );
+        const delta = json(deltaRes);
+        const deltaOk = check(
+          deltaRes,
+          {
+            'delta status is 200': (r) => r.status === 200,
+            'delta has employees': () => Array.isArray(delta?.employees),
+          },
+          { type: 'timesheet' },
+        );
+        deltaSize.add(deltaRes.body ? deltaRes.body.length : 0);
+        if (!deltaOk) {
+          console.error(`delta failed status=${deltaRes.status} body=${truncate(deltaRes.body, 500)}`);
+        }
+        if (typeof delta?.revision === 'number') knownRevision = delta.revision;
+
+        batchGet(
+          auth,
+          [
+            ['GET timesheet day history', `${WTM_API}/timesheets/${timesheetId}/days/${cell.date}/history/?origin=all&limit=500`],
+            ['GET timesheet revision', `${WTM_API}/timesheets/${YEAR}/${MONTH}/revision/?department_id=${dep}`],
+          ],
+          'after edit',
+          'timesheet',
+        );
+      } else {
+        // Текущий фронт: после сохранения перечитывает весь месяц, историю дня и ревизию
+        batchGet(
+          auth,
+          [
+            ['GET timesheet grid', `${WTM_API}/timesheets/${YEAR}/${MONTH}/?department_id=${dep}`],
+            ['GET timesheet day history', `${WTM_API}/timesheets/${timesheetId}/days/${cell.date}/history/?origin=all&limit=500`],
+            ['GET timesheet revision', `${WTM_API}/timesheets/${YEAR}/${MONTH}/revision/?department_id=${dep}`],
+          ],
+          'after edit',
+          'timesheet',
+        );
+      }
 
       sleep(THINK_TIME_SECONDS);
     }

@@ -9,9 +9,11 @@ cd "$PROJECT_ROOT"
 
 ENV_NAME="dev"
 FLOW_NAME="timesheet-hr-flow"
+# month — как текущий фронт (перечитывает месяц после правки), delta — новый фронт (changes/?since=)
+AFTER_EDIT_MODE="${AFTER_EDIT_MODE:-month}"
 TEST_MODE_VALUE="smoke"
 RUN_ID="$(date +"%Y-%m-%d_%H-%M-%S")"
-RESULTS_DIR="results/${ENV_NAME}/${FLOW_NAME}/${TEST_MODE_VALUE}/${RUN_ID}"
+RESULTS_DIR="results/${ENV_NAME}/${FLOW_NAME}/${TEST_MODE_VALUE}/${RUN_ID}_${AFTER_EDIT_MODE}"
 
 mkdir -p "$RESULTS_DIR"
 
@@ -21,7 +23,7 @@ set +a
 
 # Подразделения через запятую; VU распределяются по ним по кругу.
 # Пусто — берётся первый IN_PROGRESS табель из списка за период.
-TIMESHEET_DEPARTMENT_IDS="${TIMESHEET_DEPARTMENT_IDS:-}"
+TIMESHEET_DEPARTMENT_IDS="${TIMESHEET_DEPARTMENT_IDS:-aff5dc1b-3805-4a2b-bd16-5acde86cfaee}"  # dev: «Папич», 61 сотрудник
 # Период YYYY-MM, по умолчанию текущий месяц
 TIMESHEET_PERIOD="${TIMESHEET_PERIOD:-}"
 
@@ -33,9 +35,11 @@ MAX_DURATION=2m \
 LOGIN_FLOW_MODE=api \
 TIMESHEET_DEPARTMENT_IDS="$TIMESHEET_DEPARTMENT_IDS" \
 TIMESHEET_PERIOD="$TIMESHEET_PERIOD" \
+AFTER_EDIT_MODE="$AFTER_EDIT_MODE" \
 EDITS_PER_ITERATION=2 \
 ALLOW_CREATE=true \
 THINK_TIME_SECONDS=2 \
 k6 run tests/timesheet-hr-flow.js \
   --summary-export "$RESULTS_DIR/summary-export.json" \
+  --out csv="$RESULTS_DIR/metrics.csv.gz" \
   2>&1 | tee "$RESULTS_DIR/run.log"
