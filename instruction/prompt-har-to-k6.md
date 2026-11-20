@@ -1,90 +1,90 @@
-# Prompt: генерация k6 flow-теста из HAR
+# Prompt: generating a k6 flow test from a HAR file
 
-Этот файл нужен, для записи пользовательских flow через Chrome DevTools, сохранить HAR-файл и на его основе получить k6-тест под текущую структуру проекта.
+Use this file to record user flows with Chrome DevTools, save a HAR file and get a k6 test for the current project structure based on it.
 
 ---
 
-## 1. Что тестировщик должен отправить вместе с HAR
+## 1. What the tester sends along with the HAR
 
-Передай ChatGPT HAR-файл и заполни короткое описание:
+Give ChatGPT the HAR file and fill in a short description:
 
 ```text
-Название flow:
-Например: document-flow / vacation-flow / approval-flow
+Flow name:
+For example: document-flow / vacation-flow / approval-flow
 
-Окружение, где записан HAR:
+Environment where the HAR was recorded:
 dev / stage
 
-Что делал пользователь:
-Кратко по шагам: открыл страницу, нажал кнопку, заполнил форму, отправил заявку и т.д.
+What the user did:
+Short steps: opened a page, clicked a button, filled in a form, submitted a request, etc.
 
-Нужен ли логин:
-да / нет
+Is login required:
+yes / no
 
-Можно ли flow создавать или изменять данные:
-да / нет / не знаю
+May the flow create or change data:
+yes / no / don't know
 
-Что считается успешным результатом:
-Например: список документов загрузился, заявка создалась, статус изменился
+What counts as a successful result:
+For example: the document list loaded, the request was created, the status changed
 
-Какие endpoints точно важны, если известно:
+Endpoints that definitely matter, if known:
 
-Какие endpoints точно исключить, если известно:
+Endpoints to definitely exclude, if known:
 
-Что нельзя включать в тест:
-Например: создание реальной заявки, удаление данных, отправка уведомлений
+What must not be included in the test:
+For example: creating a real request, deleting data, sending notifications
 ```
 
-Важно: не записывай HAR на prod и не запускай load test на prod без согласования.
+Important: do not record a HAR on prod and do not run a load test on prod without approval.
 
 ---
 
-## 2. Как подготовить HAR
+## 2. How to prepare the HAR
 
-1. Открой Chrome DevTools.
-2. Перейди во вкладку **Network**.
-3. Включи:
+1. Open Chrome DevTools.
+2. Go to the **Network** tab.
+3. Enable:
 
    * **Preserve log**
    * **Disable cache**
-4. Очисти Network перед началом сценария.
-5. Выполни flow с самого начала:
+4. Clear Network before starting the scenario.
+5. Go through the flow from the very beginning:
 
-   * открой нужную страницу;
-   * залогинься, если flow требует авторизацию;
-   * выполни бизнес-сценарий;
-   * дождись завершения всех API-запросов.
-6. Не делай лишних действий в браузере.
-7. Сохрани HAR:
+   * open the required page;
+   * log in if the flow requires authorization;
+   * perform the business scenario;
+   * wait until all API requests finish.
+6. Do not do anything extra in the browser.
+7. Save the HAR:
 
-   * Right click в Network;
+   * right-click in Network;
    * **Save all as HAR with content**.
-8. Передай HAR-файл в ChatGPT вместе с этим промтом.
-9. Не записывай HAR с production, если нет отдельного разрешения.
-10. После генерации обязательно проверь, что в код не попали:
+8. Give the HAR file to ChatGPT together with this prompt.
+9. Do not record a HAR on production without separate permission.
+10. After generation, make sure the code does not contain:
 
-* реальные пароли;
+* real passwords;
 * access/refresh tokens;
 * session cookies;
 * csrf tokens;
 * production credentials;
-* персональные данные.
+* personal data.
 
 ---
 
-# Основной промт для ChatGPT
+# Main prompt for ChatGPT
 
-Ты — senior QA automation engineer / performance engineer.
+You are a senior QA automation engineer / performance engineer.
 
-Твоя задача — проанализировать приложенный HAR-файл, записанный из Chrome DevTools во время прохождения пользовательского flow, и на его основе подготовить корректный k6 нагрузочный тест под текущую структуру проекта.
+Your task is to analyze the attached HAR file, recorded in Chrome DevTools while going through a user flow, and use it to prepare a correct k6 load test for the current project structure.
 
 ---
 
-## Контекст проекта
+## Project context
 
-Проект использует k6.
+The project uses k6.
 
-Актуальная структура проекта:
+Current project structure:
 
 ```text
 k6_highload/
@@ -138,20 +138,20 @@ k6_highload/
   .env.prod
 ```
 
-Сейчас в проекте уже есть:
+The project already has:
 
 ```text
 tests/login-flow.js
 tests/home-flow.js
 ```
 
-Новые бизнес-flow нужно добавлять отдельными файлами в папку:
+New business flows must be added as separate files in:
 
 ```text
 tests/
 ```
 
-Например:
+For example:
 
 ```text
 tests/document-flow.js
@@ -162,11 +162,11 @@ tests/approval-flow.js
 
 ---
 
-## Важная архитектура проекта
+## Key project architecture
 
-Не пиши весь k6-тест с нуля, если уже есть общие модули.
+Do not write the whole k6 test from scratch when shared modules already exist.
 
-Используй существующую общую логику из `lib/`:
+Use the existing shared logic from `lib/`:
 
 ```js
 import http from 'k6/http';
@@ -186,7 +186,7 @@ import { checkBatch, json, truncate, encode } from '../lib/helpers.js';
 import { createSummary } from '../lib/summary.js';
 ```
 
-Если flow требует авторизацию, в начале сценария используй:
+If the flow requires authorization, start the scenario with:
 
 ```js
 const user = getUserByVuId(exec.vu.idInTest);
@@ -196,44 +196,44 @@ group('01_login', () => {
 });
 ```
 
-Не реализуй login заново и не копируй auth-код в новый flow.
+Do not re-implement login and do not copy auth code into the new flow.
 
 ---
 
-## Что нужно сделать с HAR
+## What to do with the HAR
 
-Проанализируй HAR-файл и определи реальный бизнес-flow.
+Analyze the HAR file and identify the real business flow.
 
-Не копируй слепо все запросы из HAR.
+Do not blindly copy every request from the HAR.
 
-Исключи из k6-теста:
+Exclude from the k6 test:
 
 * static files: `.js`, `.css`, images, fonts, svg, ico, map;
 * analytics/tracking requests;
-* requests к сторонним доменам, если они не часть бизнес-flow;
+* requests to third-party domains unless they are part of the business flow;
 * preflight `OPTIONS`;
-* websocket/polling requests, если они не критичны для сценария;
-* duplicate requests, если они не нужны для реальной нагрузки;
-* browser-only requests, которые не влияют на бизнес-сценарий.
+* websocket/polling requests unless they are critical for the scenario;
+* duplicate requests unless they are needed for realistic load;
+* browser-only requests that do not affect the business scenario.
 
-Оставь только API-запросы, которые реально участвуют в flow.
+Keep only the API requests that actually take part in the flow.
 
 ---
 
-## Безопасность
+## Security
 
-Нельзя хардкодить:
+Never hardcode:
 
-* реальные логины;
-* реальные пароли;
+* real logins;
+* real passwords;
 * Bearer tokens;
 * cookies;
 * csrf tokens;
 * session ids;
 * production credentials;
-* персональные данные.
+* personal data.
 
-Если в HAR есть динамические значения:
+If the HAR contains dynamic values:
 
 ```text
 Authorization
@@ -246,26 +246,26 @@ document id
 request id
 ```
 
-нужно:
+you must:
 
-1. определить, откуда значение получается;
-2. извлечь его из предыдущего response body/header/cookie;
-3. переиспользовать дальше в тесте;
-4. если источник значения непонятен — добавить `TODO` и объяснить, что нужно уточнить.
+1. determine where the value comes from;
+2. extract it from the previous response body/header/cookie;
+3. reuse it later in the test;
+4. if the source of the value is unclear — add a `TODO` and explain what needs to be clarified.
 
-Не выдумывай значения, которых нет в HAR или проекте.
+Do not make up values that are not in the HAR or the project.
 
 ---
 
-## Требования к k6 script
+## k6 script requirements
 
-Новый flow должен быть отдельным файлом:
+The new flow must be a separate file:
 
 ```text
 tests/{flow-name}-flow.js
 ```
 
-Options нужно создавать через:
+Create options with:
 
 ```js
 export const options = buildOptions('flow_name', {
@@ -274,20 +274,20 @@ export const options = buildOptions('flow_name', {
 });
 ```
 
-В конце файла обязательно добавь:
+Always add at the end of the file:
 
 ```js
 export const handleSummary = createSummary();
 ```
 
-Для каждого важного запроса добавь `check()`:
+Add a `check()` for every important request:
 
 * status code;
-* наличие обязательных полей в response body;
-* отсутствие бизнес-ошибки, если её можно определить;
-* наличие id, если следующий запрос зависит от этого id.
+* required fields present in the response body;
+* no business error, if one can be detected;
+* an id is present if the next request depends on it.
 
-Для batch-запросов можно использовать:
+For batch requests you can use:
 
 ```js
 checkBatch(responses, 'group_name', 'flow_type');
@@ -295,9 +295,9 @@ checkBatch(responses, 'group_name', 'flow_type');
 
 ---
 
-## Требования к env
+## Env requirements
 
-В `.env.dev`, `.env.stage`, `.env.prod` должны быть только URL и путь к users-файлу:
+`.env.dev`, `.env.stage`, `.env.prod` must contain only URLs and the path to the users file:
 
 ```env
 BASE_URL=
@@ -307,7 +307,7 @@ TEAM_ORIGIN=
 USERS_FILE=users/users-dev.csv
 ```
 
-Не добавляй в `.env.*` параметры нагрузки:
+Do not add load parameters to `.env.*`:
 
 ```text
 VUS
@@ -320,13 +320,13 @@ RAMP_DOWN
 TEST_MODE
 ```
 
-Параметры нагрузки должны быть только в shell-скриптах.
+Load parameters belong only in the shell scripts.
 
 ---
 
-## Требования к shell scripts
+## Shell script requirements
 
-Если создаёшь новый flow, предложи shell-скрипты минимум для dev и stage:
+When creating a new flow, propose shell scripts for at least dev and stage:
 
 ```text
 scripts/dev/run-dev-{flow}-smoke.sh
@@ -335,20 +335,20 @@ scripts/stage/run-stage-{flow}-smoke.sh
 scripts/stage/run-stage-{flow}-load.sh
 ```
 
-Prod scripts добавляй только как шаблон и обязательно с предупреждением:
+Add prod scripts only as a template and always with a warning:
 
 ```text
-Load test на prod нельзя запускать без согласования с ответственными.
-Сначала должен пройти smoke на dev/stage.
+A load test on prod must not be run without approval from the people responsible.
+Smoke on dev/stage must pass first.
 ```
 
-Каждый запуск должен сохранять результаты в отдельную папку:
+Each run must save results to its own folder:
 
 ```text
 results/{env}/{flow}/{mode}/{timestamp}/
 ```
 
-Внутри должны быть:
+It must contain:
 
 ```text
 run.log
@@ -359,74 +359,74 @@ summary-export.json
 
 ---
 
-## Важно про production
+## Important: production
 
-Не предлагай сразу запускать load test на prod.
+Do not suggest running a load test on prod right away.
 
-Для prod обязательно напиши предупреждение:
+For prod, always include a warning:
 
 ```text
-Перед запуском на prod нужно получить разрешение ответственного лица и согласовать параметры нагрузки.
-Сначала smoke, потом небольшой controlled load, только после этого полноценная нагрузка.
+Before running on prod, get permission from the person responsible and agree on the load parameters.
+Smoke first, then a small controlled load, and only after that the full load.
 ```
 
-По умолчанию для проверки нового flow используй dev или stage.
+By default, use dev or stage to verify a new flow.
 
 ---
 
-## Если данных не хватает
+## If information is missing
 
-Если из HAR непонятно, что именно является бизнес-сценарием, не генерируй тест вслепую.
+If it is unclear from the HAR what the business scenario is, do not generate a test blindly.
 
-Сначала уточни у пользователя:
+First ask the user:
 
-1. Как называется flow?
-2. Что пользователь делал в браузере?
-3. Какой результат считается успешным?
-4. Можно ли этому flow создавать или изменять данные?
-5. Нужно ли тестировать только чтение данных или также POST/PATCH/DELETE?
-6. На каком окружении планируется запуск: dev или stage?
-7. Есть ли ограничения по нагрузке?
+1. What is the flow called?
+2. What did the user do in the browser?
+3. What counts as a successful result?
+4. May this flow create or change data?
+5. Should only data reads be tested, or POST/PATCH/DELETE too?
+6. Which environment will it run on: dev or stage?
+7. Are there any load limits?
 
-Если информации достаточно, сразу подготовь k6-тест.
+If there is enough information, prepare the k6 test right away.
 
 ---
 
-## Что нужно вернуть в ответе
+## What to return in the answer
 
-Верни результат в таком формате:
+Return the result in this format:
 
-### 1. Краткое описание flow
+### 1. Short flow description
 
-Опиши, какой пользовательский сценарий найден в HAR.
+Describe the user scenario found in the HAR.
 
-### 2. Что вошло в тест
+### 2. What is included in the test
 
-Список API endpoints, которые нужно оставить в k6-тесте.
+The list of API endpoints to keep in the k6 test.
 
-Для каждого endpoint укажи:
+For each endpoint, give:
 
 ```text
-METHOD URL/PATH — зачем нужен
+METHOD URL/PATH — why it is needed
 ```
 
-### 3. Что исключено из HAR
+### 3. What is excluded from the HAR
 
-Список исключённых типов запросов и причину.
+The list of excluded request types and the reason.
 
-Например:
+For example:
 
 ```text
 /static/*.js — frontend static
-*.css — стили
-*.png/*.svg — изображения
+*.css — styles
+*.png/*.svg — images
 OPTIONS — preflight
-analytics — не часть бизнес-flow
+analytics — not part of the business flow
 ```
 
-### 4. Динамические данные
+### 4. Dynamic data
 
-Определи динамические значения:
+Identify the dynamic values:
 
 ```text
 csrf_token
@@ -438,33 +438,33 @@ tokens
 cookies
 ```
 
-Для каждого укажи:
+For each, state:
 
 ```text
-откуда берётся
-где используется
-как извлечь в k6
+where it comes from
+where it is used
+how to extract it in k6
 ```
 
-Если непонятно — добавь `TODO`.
+If unclear — add a `TODO`.
 
-### 5. Предлагаемое имя файла
+### 5. Proposed file name
 
-Например:
+For example:
 
 ```text
 tests/document-flow.js
 ```
 
-### 6. Полный код k6 flow-файла
+### 6. Full code of the k6 flow file
 
-Дай полный код нового файла.
+Give the full code of the new file.
 
-Код должен использовать существующие модули из `lib/`.
+The code must use the existing modules from `lib/`.
 
-### 7. Изменения в env
+### 7. Env changes
 
-Если нужно добавить новые env-переменные, явно укажи:
+If new env variables are needed, state explicitly:
 
 ```text
 .env.dev
@@ -472,75 +472,75 @@ tests/document-flow.js
 .env.prod
 ```
 
-Если изменений не нужно, напиши:
+If no changes are needed, write:
 
 ```text
-Изменения в .env.* не требуются.
+No changes to .env.* are required.
 ```
 
-### 8. Изменения в users CSV
+### 8. Users CSV changes
 
-Если нужны дополнительные поля в CSV, укажи их.
+If extra fields are needed in the CSV, list them.
 
-Например:
+For example:
 
 ```csv
 identifier,password,employee_id
 ```
 
-Если изменений не нужно, напиши:
+If no changes are needed, write:
 
 ```text
-Изменения в users CSV не требуются.
+No changes to the users CSV are required.
 ```
 
 ### 9. Shell scripts
 
-Если нужен новый flow, предложи smoke/load scripts для dev и stage.
+If a new flow is needed, propose smoke/load scripts for dev and stage.
 
-Prod scripts добавь только как шаблон и обязательно с предупреждением.
+Add prod scripts only as a template and always with a warning.
 
-### 10. Как запустить smoke
+### 10. How to run smoke
 
-Например:
+For example:
 
 ```bash
 ./scripts/stage/run-stage-document-smoke.sh
 ```
 
-### 11. Как запустить load
+### 11. How to run load
 
-Например:
+For example:
 
 ```bash
 ./scripts/stage/run-stage-document-load.sh
 ```
 
-Перед load обязательно напиши:
+Before load, always write:
 
 ```text
-Сначала должен успешно пройти smoke.
+Smoke must pass successfully first.
 ```
 
-### 12. TODO / вопросы
+### 12. TODO / questions
 
-Если HAR не даёт полной информации, не выдумывай.
+If the HAR does not give complete information, do not make things up.
 
-Добавь список вопросов:
+Add a list of questions:
 
 ```text
 TODO:
-1. Уточнить, откуда брать document_id.
-2. Уточнить, можно ли создавать реальные заявки в stage.
-3. Уточнить expected status для POST запроса.
+1. Clarify where to get document_id.
+2. Clarify whether real requests may be created on stage.
+3. Clarify the expected status for the POST request.
 ```
 
 ---
 
-## Дополнительные правила качества
+## Additional quality rules
 
-1. Названия `group()` должны отражать реальные шаги пользователя.
-2. Tags должны быть понятными:
+1. `group()` names must reflect the real user steps.
+2. Tags must be clear:
 
 ```js
 tags: {
@@ -549,36 +549,36 @@ tags: {
 }
 ```
 
-3. Не добавляй лишние sleep после каждого запроса. Sleep нужен между пользовательскими действиями.
-4. Не добавляй frontend static в нагрузочный тест.
-5. Не создавай тест, который меняет данные, если непонятно, можно ли это делать.
-6. Для POST/PATCH/DELETE запросов обязательно напиши предупреждение, что сценарий изменяет данные.
-7. Если flow создаёт сущности, по возможности предложи cleanup или отдельные тестовые данные.
-8. Если endpoint зависит от id из предыдущего ответа, этот id нужно извлекать динамически.
-9. Если endpoint возвращает ошибку в HAR, не считай его успешным без объяснения.
-10. Если есть сомнения — лучше добавить `TODO`, чем выдумывать.
+3. Do not add extra sleeps after every request. Sleep belongs between user actions.
+4. Do not add frontend static files to the load test.
+5. Do not create a test that changes data if it is unclear whether that is allowed.
+6. For POST/PATCH/DELETE requests, always add a warning that the scenario changes data.
+7. If the flow creates entities, suggest cleanup or separate test data where possible.
+8. If an endpoint depends on an id from a previous response, that id must be extracted dynamically.
+9. If an endpoint returns an error in the HAR, do not treat it as successful without explanation.
+10. When in doubt — add a `TODO` rather than make things up.
 
 ---
 
-## Self-check перед финальным ответом
+## Self-check before the final answer
 
-Перед тем как дать финальный ответ, проверь:
+Before giving the final answer, check:
 
 ```text
-1. Новый flow лежит в tests/
-2. Общая логика импортируется из lib/
-3. login используется из lib/auth.js
-4. Не скопированы лишние static/assets/analytics/OPTIONS
-5. Нет захардкоженных tokens/cookies/passwords
-6. Динамические ids извлекаются из response
-7. Есть checks для важных запросов
-8. Есть tags с понятным type
-9. Есть smoke/load shell scripts
-10. Results сохраняются в timestamp-папку
-11. Есть инструкция запуска
-12. Есть TODO, если данных из HAR не хватает
+1. The new flow is in tests/
+2. Shared logic is imported from lib/
+3. login is used from lib/auth.js
+4. No extra static/assets/analytics/OPTIONS were copied
+5. No hardcoded tokens/cookies/passwords
+6. Dynamic ids are extracted from responses
+7. Important requests have checks
+8. Tags have a clear type
+9. There are smoke/load shell scripts
+10. Results are saved to a timestamp folder
+11. There are run instructions
+12. There is a TODO if the HAR lacks information
 ```
 
 ---
 
-## Теперь проанализируй приложенный HAR-файл и подготовь k6 flow-тест под этот проект.
+## Now analyze the attached HAR file and prepare a k6 flow test for this project.

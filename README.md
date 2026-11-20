@@ -46,7 +46,7 @@ scripts/      run scripts: scripts/<env>/run-<env>-<flow>-<smoke|load>.sh
 users/        CSV files with accounts (only dev and the example are in git)
 results/      run results: results/<env>/<flow>/<mode>/<date-time>/
 docs/         reports on completed tests
-instruction/  detailed guide and the prompt for generating a new flow from a HAR file (in Russian)
+instruction/  detailed guide and the prompt for generating a new flow from a HAR file
 .env.<env>    environment URLs and the path to the accounts file
 ```
 
@@ -201,7 +201,7 @@ The script checks VPN access, runs a smoke test to confirm that the delta endpoi
 
 Custom metrics: `timesheet_edits_done`, `timesheet_edit_conflicts` (409), `timesheet_failed_iterations`, `timesheet_grid_bytes`, `timesheet_delta_bytes`.
 
-Timesheet test results: [docs/timesheet-load-report-2026-11-16.md](docs/timesheet-load-report-2026-11-16.md) (in Russian).
+Timesheet test results: [docs/timesheet-load-report-2026-11-16.md](docs/timesheet-load-report-2026-11-16.md).
 
 ## Results
 
@@ -223,7 +223,7 @@ Only the reference timesheet run is kept in git; other results are ignored.
 3. Copy a pair of scripts `scripts/<env>/run-<env>-home-{smoke,load}.sh` and change `FLOW_NAME` and the test path.
 4. Run smoke, then load.
 
-Details and a template: [instruction/README.md](instruction/README.md) (in Russian).
+Details and a template: [instruction/README.md](instruction/README.md).
 
 ## Rules
 

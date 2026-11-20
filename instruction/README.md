@@ -1,53 +1,53 @@
 # ATTENTION (read first)
-“Записывайте HAR только на dev/stage; после генерации сначала запускайте smoke; load на prod только после согласования”. Это важно, потому что HAR легко записать с настоящими cookies/tokens, а load-тест может случайно создать реальную нагрузку или реальные бизнес-данные.
+"Record HAR files only on dev/stage; after generating a test, run smoke first; run load on prod only after approval." This matters because a HAR file can easily capture real cookies/tokens, and a load test can accidentally create real load or real business data.
 
 
 # k6 Highload Project
 
-Проект используется для нагрузочного тестирования пользовательских flow через k6.
+The project is used for load testing user flows with k6.
 
-Сейчас в проекте реализованы сценарии:
+Scenarios currently implemented:
 
 ```text
-tests/login-flow.js          — проверяет только авторизацию
-tests/home-flow.js           — проверяет логин + загрузку главной страницы
-tests/device-flow.js         — отправка отметок с терминалов (iclock)
-tests/timesheet-hr-flow.js   — табель: HR открывает, создаёт и редактирует табель (изменяет данные!)
+tests/login-flow.js          — tests login only
+tests/home-flow.js           — tests login + loading the home page
+tests/device-flow.js         — sends punches from terminals (iclock)
+tests/timesheet-hr-flow.js   — timesheet: HR opens, creates and edits a timesheet (changes data!)
 ```
 
-Новые flow, например документы, отпуска, профиль или согласования, добавляются отдельными файлами в папку `tests/`.
+New flows, e.g. documents, vacations, profile or approvals, are added as separate files in the `tests/` folder.
 
 ---
 
-## За что отвечает каждая папка
+## What each folder is for
 
 ### `lib/`
 
-Общая логика, которую переиспользуют все тесты.
+Shared logic reused by all tests.
 
 ```text
-auth.js      — общий login/auth flow
-config.js    — чтение env и настройка smoke/load options
-headers.js   — общие headers для accounts/team API
-helpers.js   — json(), checkBatch(), truncate(), encode() и другие helpers
-summary.js   — сохранение summary.html / summary.json
-users.js     — чтение пользователей из CSV
+auth.js      — shared login/auth flow
+config.js    — reads env and sets up smoke/load options
+headers.js   — shared headers for the accounts/team APIs
+helpers.js   — json(), checkBatch(), truncate(), encode() and other helpers
+summary.js   — saves summary.html / summary.json
+users.js     — reads users from CSV
 ```
 
-Важно: бизнес-сценарии сюда не добавляем.
+Important: do not put business scenarios here.
 
 ---
 
 ### `tests/`
 
-Здесь лежат k6 flow-тесты.
+k6 flow tests live here.
 
 ```text
-login-flow.js   — тест только на логин
-home-flow.js    — логин + главная страница
+login-flow.js   — login-only test
+home-flow.js    — login + home page
 ```
 
-Если нужен новый сценарий, создаём новый файл:
+If you need a new scenario, create a new file:
 
 ```text
 tests/document-flow.js
@@ -59,31 +59,31 @@ tests/approval-flow.js
 
 ### `users/`
 
-CSV-файлы с тестовыми пользователями.
+CSV files with test users.
 
-Формат:
+Format:
 
 ```csv
 identifier,password
 user@example.com,password
 ```
 
-Обязательные колонки:
+Required columns:
 
 ```text
 identifier
 password
 ```
 
-Не коммитить реальные логины и пароли.
+Do not commit real logins and passwords.
 
 ---
 
 ### `scripts/`
 
-Shell-скрипты для запуска тестов.
+Shell scripts for running tests.
 
-Скрипты разделены по окружениям:
+Scripts are split by environment:
 
 ```text
 scripts/dev/
@@ -91,21 +91,21 @@ scripts/stage/
 scripts/prod/
 ```
 
-Параметры нагрузки находятся именно в `.sh` файлах, а не в `.env`.
+Load parameters live in the `.sh` files, not in `.env`.
 
 ---
 
 ### `results/`
 
-Сюда сохраняются результаты запусков.
+Run results are saved here.
 
-Структура:
+Structure:
 
 ```text
 results/{env}/{flow}/{mode}/{timestamp}/
 ```
 
-Пример:
+Example:
 
 ```text
 results/dev/home-flow/smoke/2026-06-08_15-45-30/
@@ -117,9 +117,9 @@ results/dev/home-flow/smoke/2026-06-08_15-45-30/
 
 ---
 
-## Env-файлы
+## Env files
 
-В проекте есть:
+The project has:
 
 ```text
 .env.dev
@@ -127,7 +127,7 @@ results/dev/home-flow/smoke/2026-06-08_15-45-30/
 .env.prod
 ```
 
-В них должны быть только URL и путь к users-файлу:
+They must contain only URLs and the path to the users file:
 
 ```env
 BASE_URL=
@@ -137,7 +137,7 @@ TEAM_ORIGIN=
 USERS_FILE=users/users-dev.csv
 ```
 
-Не нужно хранить в `.env.*` параметры нагрузки:
+Do not keep load parameters in `.env.*`:
 
 ```text
 VUS
@@ -150,33 +150,33 @@ RAMP_DOWN
 TEST_MODE
 ```
 
-Они должны быть в `scripts/**/*.sh`.
+They belong in `scripts/**/*.sh`.
 
 ---
 
-## Как запускать
+## How to run
 
-Перед первым запуском выдать права:
+Before the first run, make the scripts executable:
 
 ```bash
 find scripts -type f -name "*.sh" -exec chmod +x {} \;
 ```
 
-Запускать тесты нужно через shell-скрипты, а не напрямую через `k6 run`.
+Run tests through the shell scripts, not directly with `k6 run`.
 
-Правильно:
+Correct:
 
 ```bash
 ./scripts/dev/run-dev-home-smoke.sh 
 ```
 
-Неправильно:
+Wrong:
 
 ```bash
 k6 run tests/home-flow.js
 ```
 
-При прямом запуске `.env.dev` не подгружается автоматически, поэтому k6 может упасть с ошибкой `Missing required env variable: BASE_URL`.
+When run directly, `.env.dev` is not loaded automatically, so k6 may fail with `Missing required env variable: BASE_URL`.
 
 ---
 
@@ -211,17 +211,17 @@ k6 run tests/home-flow.js
 ./scripts/prod/run-prod-home-load.sh
 ```
 
-Важно: load на prod запускать только после согласования с ответственными.
+Important: run load on prod only after approval from the people responsible.
 
 ---
 
-## Smoke и Load
+## Smoke and Load
 
 ### Smoke
 
-Короткая проверка, что тест вообще работает.
+A short check that the test works at all.
 
-Обычно:
+Usually:
 
 ```text
 VUS=1
@@ -229,13 +229,13 @@ ITERATIONS=1
 MAX_DURATION=1m
 ```
 
-Smoke всегда запускается перед load.
+Smoke is always run before load.
 
 ### Load
 
-Полноценный нагрузочный запуск.
+A full load run.
 
-Обычно используется:
+Usually uses:
 
 ```text
 ramping-vus
@@ -247,17 +247,17 @@ RAMP_DOWN
 
 ---
 
-## Как добавить новый flow
+## How to add a new flow
 
-Например, нужен flow для документов.
+For example, you need a flow for documents.
 
-Создать файл:
+Create a file:
 
 ```text
 tests/document-flow.js
 ```
 
-Внутри использовать общие модули:
+Use the shared modules inside it:
 
 ```js
 import http from 'k6/http';
@@ -276,7 +276,7 @@ import { teamHeaders } from '../lib/headers.js';
 import { createSummary } from '../lib/summary.js';
 ```
 
-Если flow требует авторизацию:
+If the flow requires authorization:
 
 ```js
 const user = getUserByVuId(exec.vu.idInTest);
@@ -286,7 +286,7 @@ group('01_login', () => {
 });
 ```
 
-Не копировать код логина в новый flow. Логин уже реализован в:
+Do not copy login code into the new flow. Login is already implemented in:
 
 ```text
 lib/auth.js
@@ -294,7 +294,7 @@ lib/auth.js
 
 ---
 
-## Минимальный шаблон нового flow
+## Minimal template for a new flow
 
 ```js
 import http from 'k6/http';
@@ -350,20 +350,20 @@ export const handleSummary = createSummary();
 
 ---
 
-## Правила поддержки
+## Maintenance rules
 
-1. Новый бизнес-сценарий добавляем в `tests/`.
-2. Общую логику добавляем в `lib/`.
-3. URL не пишем прямо в JS-коде.
-4. URL и users-файл храним в `.env.*`.
-5. Параметры нагрузки храним в `scripts/**/*.sh`.
-6. Результаты сохраняем в `results/`.
-7. Перед load всегда запускаем smoke.
-8. Реальные users CSV и результаты не коммитим.
+1. Add new business scenarios to `tests/`.
+2. Add shared logic to `lib/`.
+3. Do not write URLs directly in JS code.
+4. Keep URLs and the users file in `.env.*`.
+5. Keep load parameters in `scripts/**/*.sh`.
+6. Save results to `results/`.
+7. Always run smoke before load.
+8. Do not commit real users CSV files or results.
 
 ---
 
-## Рекомендуемый `.gitignore`
+## Recommended `.gitignore`
 
 ```gitignore
 results/
@@ -380,13 +380,13 @@ users/users-prod.csv
 
 ---
 
-## Главное правило
+## The main rule
 
 ```text
-lib/      — общая логика
-tests/    — конкретные flow-тесты
-scripts/  — запуск тестов
-users/    — тестовые пользователи
-results/  — результаты запусков
-.env.*    — настройки окружений
+lib/      — shared logic
+tests/    — specific flow tests
+scripts/  — running tests
+users/    — test users
+results/  — run results
+.env.*    — environment settings
 ```
