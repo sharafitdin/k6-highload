@@ -1,130 +1,130 @@
-# k6 Highload — нагрузочные тесты MyLink
+# k6 Highload — MyLink load tests
 
-Набор нагрузочных тестов на [k6](https://k6.io) для сервисов MyLink: авторизация через SSO, главная страница и отдельные API (в том числе сервис учёта рабочего времени **wtm**), отметки с терминалов (iclock) и табель.
+A set of [k6](https://k6.io) load tests for MyLink services: SSO login, the home page and individual APIs (including the **wtm** time-tracking service), attendance terminals (iclock), and the timesheet.
 
-Каждый тест — это сценарий реального пользователя: логин, затем те же запросы, что делает фронт. Тесты запускаются готовыми скриптами под нужный стенд (dev / stage / prod) в двух режимах: **smoke** (проверить, что сценарий работает) и **load** (дать нагрузку). Результат каждого запуска сохраняется в отдельную папку с HTML-отчётом.
+Each test replays a real user scenario: log in, then send the same requests the frontend sends. Tests are started with ready-made scripts per environment (dev / stage / prod) in two modes: **smoke** (check that the scenario works) and **load** (apply load). Every run is saved to its own folder with an HTML report.
 
-## Что тестируется
+## What is tested
 
-| Сценарий | Файл | Что делает пользователь | Основные эндпоинты | Меняет данные |
+| Scenario | File | What the user does | Main endpoints | Changes data |
 |---|---|---|---|---|
-| **login** | `tests/login-flow.js` | Только логин | SSO (Ory Kratos): `GET /self-service/login/browser\|api`, `POST <flow action>` | нет |
-| **home** | `tests/home-flow.js` | Логин → профиль → запросы главной страницы. Умеет нагружать **любой один URL** (режим single request) | `engine/api/v2/employees/profile/`, сейчас включён `POST wtm/api/v1/calendar/export/` | зависит от запроса |
-| **device** | `tests/device-flow.js` | Терминал (ZKTeco iclock) шлёт heartbeat и отметки прихода/ухода | `wtm/iclock/getrequest`, `POST wtm/iclock/cdata?table=ATTLOG` | **да** (отметки) |
-| **timesheet-hr** | `tests/timesheet-hr-flow.js` | HR открывает табель, при необходимости создаёт его, правит ячейки, смотрит историю | `wtm/api/v1/timesheets/…` (список, сетка месяца, `changes/`, дельта, история) | **да** (табель) |
+| **login** | `tests/login-flow.js` | Logs in, nothing else | SSO (Ory Kratos): `GET /self-service/login/browser\|api`, `POST <flow action>` | no |
+| **home** | `tests/home-flow.js` | Login → profile → home page requests. Can also load **any single URL** (single request mode) | `engine/api/v2/employees/profile/`; currently enabled: `POST wtm/api/v1/calendar/export/` | depends on the request |
+| **device** | `tests/device-flow.js` | A ZKTeco (iclock) terminal sends a heartbeat and check-in / check-out punches | `wtm/iclock/getrequest`, `POST wtm/iclock/cdata?table=ATTLOG` | **yes** (punches) |
+| **timesheet-hr** | `tests/timesheet-hr-flow.js` | An HR user opens a timesheet, creates it if missing, edits cells, views history | `wtm/api/v1/timesheets/…` (list, month grid, `changes/`, delta, history) | **yes** (timesheet) |
 
-Все пути API идут от `API_URL` из `.env.<стенд>`, например `https://dev-sso.mylink.kz/service/wtm/api/v1/...`. Авторизация — Bearer-токен, который возвращает логин в режиме `LOGIN_FLOW_MODE=api`, или cookies в режиме `browser`.
+All API paths are relative to `API_URL` from `.env.<env>`, e.g. `https://dev-sso.mylink.kz/service/wtm/api/v1/...`. Requests are authorized with the Bearer token returned by login in `LOGIN_FLOW_MODE=api`, or with cookies in `browser` mode.
 
-## Быстрый старт
+## Quick start
 
-1. Установить k6: `brew install k6` (macOS) или по [инструкции](https://grafana.com/docs/k6/latest/set-up/install-k6/). Для отчёта по табелю нужен ещё `python3`.
-2. Подключить VPN: dev и stage доступны только через него.
-3. Выдать права на скрипты:
+1. Install k6: `brew install k6` (macOS) or follow the [install guide](https://grafana.com/docs/k6/latest/set-up/install-k6/). The timesheet report also needs `python3`.
+2. Connect to the VPN: dev and stage are reachable only through it.
+3. Make the scripts executable:
 
    ```bash
    find scripts -type f -name "*.sh" -exec chmod +x {} \;
    ```
 
-4. Положить учётки в `users/` (см. «Учётки»).
-5. Запустить smoke, например логин на dev:
+4. Put test accounts into `users/` (see "Accounts").
+5. Run a smoke test, e.g. login on dev:
 
    ```bash
    ./scripts/dev/run-dev-login-smoke.sh
    ```
 
-6. Открыть отчёт `results/dev/login-flow/smoke/<дата-время>/summary.html`.
+6. Open the report: `results/dev/login-flow/smoke/<date-time>/summary.html`.
 
-Запускать тесты нужно **только через скрипты** из `scripts/`: они подгружают `.env.<стенд>`, задают параметры нагрузки и создают папку для результатов. Прямой `k6 run tests/...` упадёт с `Missing required env variable: BASE_URL`.
+Always run tests **through the scripts** in `scripts/`: they load `.env.<env>`, set the load parameters and create the results folder. A plain `k6 run tests/...` fails with `Missing required env variable: BASE_URL`.
 
-## Структура проекта
+## Project structure
 
 ```text
-tests/        сценарии (по одному файлу на flow)
-lib/          общий код: логин, конфиг и профили нагрузки, заголовки, чтение учёток, отчёт
-scripts/      скрипты запуска: scripts/<стенд>/run-<стенд>-<flow>-<smoke|load>.sh
-              + run-timesheet-compare.sh и timesheet-report.py для табеля
-users/        CSV с учётками (в git только dev и пример)
-results/      результаты запусков: results/<стенд>/<flow>/<режим>/<дата-время>/
-docs/         отчёты по проведённым тестам
-instruction/  подробная инструкция и промпт для генерации нового flow из HAR
-.env.<стенд>  адреса стендов и путь к файлу учёток
+tests/        scenarios (one file per flow)
+lib/          shared code: login, config and load profiles, headers, accounts, report
+scripts/      run scripts: scripts/<env>/run-<env>-<flow>-<smoke|load>.sh
+              + run-timesheet-compare.sh and timesheet-report.py for the timesheet
+users/        CSV files with accounts (only dev and the example are in git)
+results/      run results: results/<env>/<flow>/<mode>/<date-time>/
+docs/         reports on completed tests
+instruction/  detailed guide and the prompt for generating a new flow from a HAR file (in Russian)
+.env.<env>    environment URLs and the path to the accounts file
 ```
 
-`lib/` содержит только общую логику. Бизнес-сценарии живут в `tests/`.
+`lib/` holds shared logic only. Business scenarios live in `tests/`.
 
-| Модуль | Назначение |
+| Module | Purpose |
 |---|---|
-| `lib/auth.js` | Логин через Ory Kratos: `browser` (форма + csrf, возвращает cookies) или `api` (возвращает `session_token`) |
-| `lib/config.js` | Чтение env, профили нагрузки smoke/load, пороги по умолчанию |
-| `lib/headers.js` | Общие заголовки для accounts/team |
-| `lib/users.js` | Чтение CSV с учётками. Виртуальный пользователь N берёт строку N по кругу |
-| `lib/helpers.js` | `json()`, `checkBatch()`, `truncate()` и другие мелочи |
-| `lib/summary.js` | Сохранение `summary.html` и `summary.json` |
+| `lib/auth.js` | Login via Ory Kratos: `browser` (form + csrf, returns cookies) or `api` (returns `session_token`) |
+| `lib/config.js` | Reads env, smoke/load profiles, default thresholds |
+| `lib/headers.js` | Shared headers for accounts / team |
+| `lib/users.js` | Reads the accounts CSV. Virtual user N takes row N, wrapping around |
+| `lib/helpers.js` | `json()`, `checkBatch()`, `truncate()` and other small helpers |
+| `lib/summary.js` | Writes `summary.html` and `summary.json` |
 
-## Стенды и учётки
+## Environments and accounts
 
-| Стенд | env-файл | Адреса | Учётки |
+| Environment | env file | Hosts | Accounts |
 |---|---|---|---|
-| dev | `.env.dev` | `dev-sso.mylink.kz`, `dev-team.mylink.kz` | `users/users-dev.csv` (в git) |
-| stage | `.env.stage` | `stage-sso.mylink.kz`, `stage-team.mylink.kz` | `users/users-stage.csv`; для табеля — `users/users-stage-timesheet.csv` |
-| prod | `.env.prod` | прод | `users/users-prod.csv` |
+| dev | `.env.dev` | `dev-sso.mylink.kz`, `dev-team.mylink.kz` | `users/users-dev.csv` (in git) |
+| stage | `.env.stage` | `stage-sso.mylink.kz`, `stage-team.mylink.kz` | `users/users-stage.csv`; for the timesheet — `users/users-stage-timesheet.csv` |
+| prod | `.env.prod` | production | `users/users-prod.csv` |
 
-В `.env.*` только адреса и путь к учёткам. Параметры нагрузки задаются в `.sh`-скриптах.
+`.env.*` files contain only URLs and the accounts path. Load parameters are set in the `.sh` scripts.
 
-Формат CSV (пример — `users/users-example.csv`):
+CSV format (see `users/users-example.csv`):
 
 ```csv
 identifier,password
 user@example.com,password
 ```
 
-Учётки stage и prod в git не хранятся (см. `.gitignore`), их передают отдельно. Учётка не должна требовать 2FA: со вторым фактором запросы получают 401/403. Для табеля нужна роль `hr` (или `timekeeper`).
+Stage and prod accounts are not stored in git (see `.gitignore`) and are shared separately. Accounts must not require 2FA: with a second factor, requests get 401/403. The timesheet scenario needs the `hr` (or `timekeeper`) role.
 
-## Режимы запуска
+## Run modes
 
-**smoke** — короткая проверка, что сценарий проходит (по умолчанию 1 пользователь, 1 итерация). Всегда запускается перед load.
+**smoke** — a short check that the scenario passes (by default 1 user, 1 iteration). Always run it before load.
 
-**load** — нагрузка по ступеням (`ramping-vus`):
+**load** — stepped load (`ramping-vus`):
 
 ```text
-0 → VUS_1 за RAMP_1 → VUS за RAMP_2 → держим VUS в течение HOLD → 0 за RAMP_DOWN
+0 → VUS_1 over RAMP_1 → VUS over RAMP_2 → hold VUS for HOLD → 0 over RAMP_DOWN
 ```
 
-Пороги по умолчанию: ошибок < 5%, p95 времени ответа < 2 с, у каждого сценария есть свои проверки (`checks`) не ниже 95%. Если порог не выполнен, k6 пишет `thresholds … have been crossed`. Это значит, что сервис не уложился в норму, а не что тест сломан.
+Default thresholds: errors < 5%, p95 response time < 2 s, and each scenario's own checks ≥ 95%. If a threshold fails, k6 prints `thresholds … have been crossed`. That means the service missed the target, not that the test is broken.
 
-Общие переменные (задаются в скриптах или перед командой):
+Common variables (set in the scripts or before the command):
 
-| Переменная | По умолчанию | Описание |
+| Variable | Default | Description |
 |---|---|---|
-| `TEST_MODE` | `smoke` | `smoke` или `load` |
+| `TEST_MODE` | `smoke` | `smoke` or `load` |
 | `VUS`, `ITERATIONS`, `MAX_DURATION` | `1`, `1`, `1m` | smoke |
-| `VUS_1`, `VUS`, `RAMP_1`, `RAMP_2`, `HOLD`, `RAMP_DOWN` | `500`, `2000`, `5m`, `10m`, `10m`, `5m` | load; в скриптах заданы свои, гораздо меньшие значения |
-| `LOGIN_FLOW_MODE` | `browser` | `browser` (cookies) или `api` (Bearer-токен) |
-| `THINK_TIME_SECONDS` | `1` | пауза между действиями пользователя |
+| `VUS_1`, `VUS`, `RAMP_1`, `RAMP_2`, `HOLD`, `RAMP_DOWN` | `500`, `2000`, `5m`, `10m`, `10m`, `5m` | load; the scripts set their own, much smaller values |
+| `LOGIN_FLOW_MODE` | `browser` | `browser` (cookies) or `api` (Bearer token) |
+| `THINK_TIME_SECONDS` | `1` | pause between user actions |
 
-## Сценарии
+## Scenarios
 
-### login — авторизация
+### login — authentication
 
-Проверяет только SSO: создание login flow и отправку логина и пароля. Подходит для нагрузки на сам SSO.
+Tests only SSO: creating a login flow and submitting the username and password. Use it to load the SSO itself.
 
 ```bash
 ./scripts/dev/run-dev-login-smoke.sh
-./scripts/dev/run-dev-login-load.sh      # 10 → 50 пользователей, ~7 мин
+./scripts/dev/run-dev-login-load.sh      # 10 → 50 users, ~7 min
 ```
 
-Скрипты есть для dev, stage и prod.
+Scripts exist for dev, stage and prod.
 
-### home — главная страница и отдельные URL wtm
+### home — home page and individual wtm URLs
 
-Логинится, получает профиль сотрудника и отправляет пачку запросов главной страницы. Сейчас в списке включён только `POST /service/wtm/api/v1/calendar/export/` (экспорт календаря). Остальные запросы (виджеты, отметки, календарь, документы) лежат в файле закомментированными: их можно включить по необходимости.
+Logs in, fetches the employee profile and sends a batch of home page requests. Only `POST /service/wtm/api/v1/calendar/export/` (calendar export) is currently enabled. The other requests (widgets, marks, calendar, documents) are commented out in the file and can be enabled as needed.
 
 ```bash
 ./scripts/dev/run-dev-home-smoke.sh
 ./scripts/dev/run-dev-home-load.sh
 ```
 
-**Нагрузка на один любой URL** без правки кода — через переменные:
+**Load any single URL** without changing code, via variables:
 
 ```bash
 SINGLE_REQUEST_URL='{{API_URL}}/service/wtm/api/v1/calendar/today-marks/' \
@@ -132,20 +132,20 @@ SINGLE_REQUEST_NAME='GET today-marks' \
 ./scripts/dev/run-dev-home-load.sh
 ```
 
-| Переменная | Описание |
+| Variable | Description |
 |---|---|
-| `SINGLE_REQUEST_URL` | URL запроса. Подстановки: `{{API_URL}}`, `{{BASE_URL}}`, `{{employeeId}}` |
-| `SINGLE_REQUEST_METHOD` | `GET` по умолчанию |
-| `SINGLE_REQUEST_BODY` | тело запроса, те же подстановки |
-| `SINGLE_REQUEST_CONTENT_TYPE` | `application/json` по умолчанию |
-| `SINGLE_REQUEST_NAME` | имя запроса в отчёте |
-| `SKIP_PROFILE` | `true` — не запрашивать профиль (тогда `{{employeeId}}` пустой) |
+| `SINGLE_REQUEST_URL` | Request URL. Placeholders: `{{API_URL}}`, `{{BASE_URL}}`, `{{employeeId}}` |
+| `SINGLE_REQUEST_METHOD` | `GET` by default |
+| `SINGLE_REQUEST_BODY` | request body, same placeholders |
+| `SINGLE_REQUEST_CONTENT_TYPE` | `application/json` by default |
+| `SINGLE_REQUEST_NAME` | request name in the report |
+| `SKIP_PROFILE` | `true` — skip the profile request (then `{{employeeId}}` is empty) |
 
-### device — отметки с терминалов (iclock)
+### device — attendance terminals (iclock)
 
-Имитирует терминал ZKTeco: heartbeat (`GET /service/wtm/iclock/getrequest`), отметка прихода и ухода (`POST /service/wtm/iclock/cdata?table=ATTLOG`, ответ должен быть `OK`). Работает только с `LOGIN_FLOW_MODE=api`. **Создаёт отметки** у сотрудников с указанными PIN.
+Simulates a ZKTeco terminal: heartbeat (`GET /service/wtm/iclock/getrequest`), check-in and check-out punches (`POST /service/wtm/iclock/cdata?table=ATTLOG`, the response must be `OK`). Works only with `LOGIN_FLOW_MODE=api`. **Creates punches** for employees with the given PINs.
 
-Готовых скриптов для него нет, запуск вручную:
+There are no run scripts for it yet; run it manually:
 
 ```bash
 set -a; source .env.dev; set +a
@@ -153,87 +153,87 @@ RESULTS_DIR="results/dev/device-flow/smoke/$(date +%F_%H-%M-%S)"; mkdir -p "$RES
 TEST_MODE=smoke LOGIN_FLOW_MODE=api RESULTS_DIR="$RESULTS_DIR" k6 run tests/device-flow.js
 ```
 
-| Переменная | По умолчанию | Описание |
+| Variable | Default | Description |
 |---|---|---|
-| `DEVICE_SERIALS` | `WJA6244800003,HDP1254500162` | серийные номера терминалов, по кругу на пользователей |
-| `DEVICE_PINS` | пусто | PIN сотрудников через запятую; пусто — `PIN_START … PIN_START+PINS_PER_DEVICE-1` |
-| `PIN_START`, `PINS_PER_DEVICE` | `1`, `100` | диапазон PIN |
-| `SEND_HEARTBEAT` | `true` | слать heartbeat перед отметками |
-| `ICLOCK_BASE` | `${API_URL}/service/wtm` | база iclock |
+| `DEVICE_SERIALS` | `WJA6244800003,HDP1254500162` | terminal serial numbers, assigned to users round-robin |
+| `DEVICE_PINS` | empty | employee PINs, comma-separated; empty — `PIN_START … PIN_START+PINS_PER_DEVICE-1` |
+| `PIN_START`, `PINS_PER_DEVICE` | `1`, `100` | PIN range |
+| `SEND_HEARTBEAT` | `true` | send a heartbeat before the punches |
+| `ICLOCK_BASE` | `${API_URL}/service/wtm` | iclock base URL |
 
-### timesheet-hr — табель
+### timesheet-hr — timesheet
 
-Сценарий одного HR за итерацию:
+One HR user per iteration:
 
-1. Логин.
-2. Список табелей за месяц, профиль, роли, дерево подразделений.
-3. Если табеля по подразделению нет — создание (`POST /timesheets/`).
-4. Открытие табеля: сетка месяца, alerts, revision, фильтр сотрудников, коды.
-5. Правка ячеек сотрудник/день (`PUT /timesheets/{год}/{месяц}/changes/`), затем обновление: весь месяц или дельта (см. `AFTER_EDIT_MODE`).
-6. История изменений табеля.
+1. Log in.
+2. Timesheet list for the month, profile, roles, department tree.
+3. If the department has no timesheet — create one (`POST /timesheets/`).
+4. Open the timesheet: month grid, alerts, revision, employee filter, codes.
+5. Edit employee/day cells (`PUT /timesheets/{year}/{month}/changes/`), then refresh: the whole month or a delta (see `AFTER_EDIT_MODE`).
+6. Timesheet change history.
 
-Отправка на согласование, согласование и возврат на доработку **не** выполняются: они блокируют табель для ручного тестирования.
+Submitting for approval, approving and returning for rework are **not** performed: they lock the timesheet for manual testing.
 
 ```bash
 ./scripts/dev/run-dev-timesheet-hr-smoke.sh
-./scripts/dev/run-dev-timesheet-hr-load.sh    # 5 → 10 HR, ~8 мин
+./scripts/dev/run-dev-timesheet-hr-load.sh    # 5 → 10 HR users, ~8 min
 SMOKE_VUS=3 ./scripts/stage/run-stage-timesheet-hr-smoke.sh
 ```
 
-**Прогон «до/после» одной командой** (stage или dev):
+**Before/after run in one command** (stage or dev):
 
 ```bash
 ./scripts/run-timesheet-compare.sh stage
 ```
 
-Скрипт проверяет VPN, на smoke проверяет, что дельта отдаёт поле `employees` (то есть оптимизация бэка выкачена), гоняет load в режиме `month`, потом в режиме `delta` и печатает таблицу для Telegram. `ONLY=month` — только один режим, `SKIP_FIX_CHECK=true` — без проверки дельты. Таблицу по любым прогонам можно собрать отдельно: `python3 scripts/timesheet-report.py <папка_прогона> [<папка_прогона> …]`.
+The script checks VPN access, runs a smoke test to confirm that the delta endpoint returns the `employees` field (i.e. the backend optimization is deployed), runs load in `month` mode, then in `delta` mode, and prints a table ready to paste into Telegram. `ONLY=month` runs a single mode, `SKIP_FIX_CHECK=true` skips the delta check. You can build the table for any runs separately: `python3 scripts/timesheet-report.py <run_dir> [<run_dir> …]`.
 
-| Переменная | По умолчанию | Описание |
+| Variable | Default | Description |
 |---|---|---|
-| `AFTER_EDIT_MODE` | `month` | `month` — после правки перечитать весь месяц (текущий фронт); `delta` — `GET …/changes/?since=<ревизия>` (новый фронт) |
-| `TIMESHEET_DEPARTMENT_IDS` | dev: «Папич», stage: «Бухгалтерия» | ID подразделений через запятую; пусто — берутся табели «в работе», где есть сотрудники |
-| `TIMESHEET_PERIOD` | текущий месяц | `YYYY-MM` |
-| `EDITS_PER_ITERATION` | `2` | сколько ячеек правит HR за итерацию |
-| `ALLOW_CREATE` | `true` | создавать табель, если его нет |
-| `SMOKE_VUS` | `1` | пользователей в smoke |
-| `TIMESHEET_USERS_FILE` | stage: `users/users-stage-timesheet.csv` | отдельный файл учёток для табеля |
-| `FAIL_BACKOFF_SECONDS` | `10` | пауза после прерванной итерации |
+| `AFTER_EDIT_MODE` | `month` | `month` — re-read the whole month after an edit (current frontend); `delta` — `GET …/changes/?since=<revision>` (new frontend) |
+| `TIMESHEET_DEPARTMENT_IDS` | dev: "Папич", stage: "Бухгалтерия" | department IDs, comma-separated; empty — in-progress timesheets that have employees |
+| `TIMESHEET_PERIOD` | current month | `YYYY-MM` |
+| `EDITS_PER_ITERATION` | `2` | cells an HR user edits per iteration |
+| `ALLOW_CREATE` | `true` | create the timesheet if it does not exist |
+| `SMOKE_VUS` | `1` | users in smoke |
+| `TIMESHEET_USERS_FILE` | stage: `users/users-stage-timesheet.csv` | separate accounts file for the timesheet |
+| `FAIL_BACKOFF_SECONDS` | `10` | pause after an interrupted iteration |
 
-Свои метрики: `timesheet_edits_done`, `timesheet_edit_conflicts` (409), `timesheet_failed_iterations`, `timesheet_grid_bytes`, `timesheet_delta_bytes`.
+Custom metrics: `timesheet_edits_done`, `timesheet_edit_conflicts` (409), `timesheet_failed_iterations`, `timesheet_grid_bytes`, `timesheet_delta_bytes`.
 
-Результаты тестов табеля: [docs/timesheet-load-report-2026-11-16.md](docs/timesheet-load-report-2026-11-16.md).
+Timesheet test results: [docs/timesheet-load-report-2026-11-16.md](docs/timesheet-load-report-2026-11-16.md) (in Russian).
 
-## Результаты
+## Results
 
-Каждый запуск пишет в `results/<стенд>/<flow>/<режим>/<дата-время>/`:
+Each run writes to `results/<env>/<flow>/<mode>/<date-time>/`:
 
-| Файл | Что внутри |
+| File | Contents |
 |---|---|
-| `summary.html` | HTML-отчёт: проверки, время ответа по каждому запросу, ошибки. Его и пересылают |
-| `run.log` | полный вывод k6 с текстами ошибок |
-| `summary.json`, `summary-export.json` | те же итоги в машинном виде |
-| `metrics.csv.gz` | время каждого запроса (пока только у табеля), для разбивки по секундам |
+| `summary.html` | HTML report: checks, response time per request, errors. This is the file to share |
+| `run.log` | full k6 output with error messages |
+| `summary.json`, `summary-export.json` | the same totals, machine-readable |
+| `metrics.csv.gz` | timing of every request (timesheet only for now), for per-second breakdowns |
 
-В git хранится только эталонный прогон табеля, остальные результаты игнорируются.
+Only the reference timesheet run is kept in git; other results are ignored.
 
-## Как добавить новый сценарий
+## Adding a new scenario
 
-1. Записать HAR в Chrome DevTools на dev или stage (не на prod).
-2. Сгенерировать k6-тест по [instruction/prompt-har-to-k6.md](instruction/prompt-har-to-k6.md) или написать вручную в `tests/<имя>-flow.js`, используя `login()` из `lib/auth.js` и `buildOptions()` из `lib/config.js`.
-3. Скопировать пару скриптов `scripts/<стенд>/run-<стенд>-home-{smoke,load}.sh` и поменять `FLOW_NAME` и путь к тесту.
-4. Прогнать smoke, потом load.
+1. Record a HAR in Chrome DevTools on dev or stage (never on prod).
+2. Generate a k6 test with [instruction/prompt-har-to-k6.md](instruction/prompt-har-to-k6.md) or write it by hand in `tests/<name>-flow.js`, using `login()` from `lib/auth.js` and `buildOptions()` from `lib/config.js`.
+3. Copy a pair of scripts `scripts/<env>/run-<env>-home-{smoke,load}.sh` and change `FLOW_NAME` and the test path.
+4. Run smoke, then load.
 
-Подробности и шаблон — в [instruction/README.md](instruction/README.md).
+Details and a template: [instruction/README.md](instruction/README.md) (in Russian).
 
-## Правила
+## Rules
 
-- Сначала smoke, потом load.
-- **Load на prod — только после согласования** с ответственными: сначала smoke, потом небольшая контролируемая нагрузка.
-- Сценарии `device` и `timesheet-hr` создают и меняют данные — только на dev и stage.
-- Не коммитить учётки stage и prod, HAR-файлы (в них cookies и токены) и лишние результаты.
-- Не запускать два load на один стенд одновременно: нагрузка сложится, цифры будут неверными.
+- Smoke first, then load.
+- **Load on prod only after approval** from the people responsible: smoke first, then a small controlled load.
+- The `device` and `timesheet-hr` scenarios create and change data — dev and stage only.
+- Do not commit stage/prod accounts, HAR files (they contain cookies and tokens) or extra results.
+- Do not run two load tests against the same environment at once: the load adds up and the numbers are wrong.
 
-## Известные особенности
+## Known caveats
 
-- В режиме `LOGIN_FLOW_MODE=browser` заголовки `Origin` и `Referer` для отправки логина зашиты на `dev-sso.mylink.kz` (`lib/headers.js`, `loginSubmitHeaders`). На stage и prod надёжнее `LOGIN_FLOW_MODE=api`.
-- При длительной нагрузке файрвол стенда может временно заблокировать IP, с которого идёт тест: стенд перестаёт отвечать по TCP. Скрипт сравнения табеля проверяет доступ до и после каждого прогона.
+- In `LOGIN_FLOW_MODE=browser`, the `Origin` and `Referer` headers for the login submit are hardcoded to `dev-sso.mylink.kz` (`lib/headers.js`, `loginSubmitHeaders`). On stage and prod, `LOGIN_FLOW_MODE=api` is more reliable.
+- Under sustained load, the environment's firewall may temporarily block the IP the test runs from: the environment stops accepting TCP connections. The timesheet compare script checks access before and after each run.
